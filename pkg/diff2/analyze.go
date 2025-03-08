@@ -2,6 +2,7 @@ package diff2
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -247,12 +248,27 @@ func humanDiff(a, b targetConfig) string {
 	return fmt.Sprintf("%s ttl=(%d->%d)", a.comparableNoTTL, a.rec.TTL, b.rec.TTL)
 }
 
+var echRe = regexp.MustCompile(`ech="?[\w+/=]+"?`)
+
 func diffTargets(existing, desired []targetConfig) ChangeList {
 	// fmt.Printf("DEBUG: diffTargets(\nexisting=%v\ndesired=%v\nDEBUG.\n", existing, desired)
 
 	// Nothing to do?
 	if len(existing) == 0 && len(desired) == 0 {
 		return nil
+	}
+
+	echs := make(map[string]string)
+	for _, v := range existing {
+		echs[v.rec.NameFQDN] = echRe.FindString(v.rec.SvcParams)
+	}
+	for i, v := range desired {
+		if strings.Contains(v.rec.SvcParams, "ech=IGNORE") {
+			v.rec.SvcParams = echRe.ReplaceAllString(v.rec.SvcParams, echs[v.rec.NameFQDN])
+			v.comparableFull = echRe.ReplaceAllString(v.comparableFull, echs[v.rec.NameFQDN])
+			v.comparableNoTTL = echRe.ReplaceAllString(v.comparableNoTTL, echs[v.rec.NameFQDN])
+		}
+		desired[i] = v
 	}
 
 	var instructions ChangeList
