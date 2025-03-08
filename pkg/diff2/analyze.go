@@ -248,7 +248,7 @@ func humanDiff(a, b targetConfig) string {
 	return fmt.Sprintf("%s ttl=(%d->%d)", a.comparableNoTTL, a.rec.TTL, b.rec.TTL)
 }
 
-var echRe = regexp.MustCompile(`ech="?[\w+/=]+"?`)
+var echRe = regexp.MustCompile(`ech="?([\w+/=]+)"?`)
 
 func diffTargets(existing, desired []targetConfig) ChangeList {
 	// fmt.Printf("DEBUG: diffTargets(\nexisting=%v\ndesired=%v\nDEBUG.\n", existing, desired)
@@ -260,13 +260,24 @@ func diffTargets(existing, desired []targetConfig) ChangeList {
 
 	echs := make(map[string]string)
 	for _, v := range existing {
-		echs[v.rec.NameFQDN] = echRe.FindString(v.rec.SvcParams)
+		matches := echRe.FindStringSubmatch(v.rec.SvcParams)
+		if len(matches) == 2 {
+			echs[v.rec.NameFQDN] = matches[1]
+		}
 	}
 	for i, v := range desired {
 		if strings.Contains(v.rec.SvcParams, "ech=IGNORE") {
-			v.rec.SvcParams = echRe.ReplaceAllString(v.rec.SvcParams, echs[v.rec.NameFQDN])
-			v.comparableFull = echRe.ReplaceAllString(v.comparableFull, echs[v.rec.NameFQDN])
-			v.comparableNoTTL = echRe.ReplaceAllString(v.comparableNoTTL, echs[v.rec.NameFQDN])
+			var unquoted, quoted string
+			if _, ok := echs[v.rec.NameFQDN]; ok {
+				unquoted = fmt.Sprintf("ech=%s", echs[v.rec.NameFQDN])
+				quoted = fmt.Sprintf("ech=%q", echs[v.rec.NameFQDN])
+			} else {
+				unquoted = ""
+				quoted = ""
+			}
+			v.rec.SvcParams = echRe.ReplaceAllString(v.rec.SvcParams, unquoted)
+			v.comparableFull = echRe.ReplaceAllString(v.comparableFull, quoted)
+			v.comparableNoTTL = echRe.ReplaceAllString(v.comparableNoTTL, quoted)
 		}
 		desired[i] = v
 	}
